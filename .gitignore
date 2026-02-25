@@ -1,0 +1,18 @@
+# Build artifacts
+mac/build/
+mac/dist/
+mac/__pycache__/
+mac/.build_venv/
+mac/.venv/
+*.pyc
+
+# macOS
+.DS_Store
+
+# Runtime state
+mac/.jorkspoofer_gui.json
+
+# Large assets (managed separately)
+mac/golden_image/
+mac/jorkSpoofer-base.tar.zst
+mac/chromium_144.apk

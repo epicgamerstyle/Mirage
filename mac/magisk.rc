@@ -1,0 +1,63 @@
+on post-fs-data
+    start logd
+    exec u:r:su:s0 root root -- /boot/magisk/magiskpolicy --live --magisk "allow * magisk_file lnk_file *"
+    exec u:r:magisk:s0 root root -- /boot/magisk/magiskpolicy --live --magisk "allow * magisk_file lnk_file *"
+    exec u:r:update_engine:s0 root root -- /boot/magisk/magiskpolicy --live --magisk "allow * magisk_file lnk_file *"
+    exec u:r:su:s0 root root -- /boot/magisk/magisk64 --auto-selinux --setup-sbin /boot/magisk /sbin
+    # Pre-seed magisk.db with zygisk=0 (Kitsune ptrace Zygisk disabled; using ReZygisk instead)
+    copy /boot/magisk/magisk.db /data/adb/magisk.db
+    chown root root /data/adb/magisk.db
+    chmod 0600 /data/adb/magisk.db
+    exec u:r:su:s0 root root -- /sbin/magisk --auto-selinux --post-fs-data
+
+on nonencrypted
+    exec u:r:su:s0 root root -- /sbin/magisk --auto-selinux --service
+
+on property:vold.decrypt=trigger_restart_framework
+    exec u:r:su:s0 root root -- /sbin/magisk --auto-selinux --service
+
+on property:sys.boot_completed=1
+    mkdir /data/adb/magisk 755
+    # Core binaries from /sbin (set up by --setup-sbin)
+    copy /sbin/magisk64 /data/adb/magisk/magisk64
+    chmod 700 /data/adb/magisk/magisk64
+    copy /sbin/magiskpolicy /data/adb/magisk/magiskpolicy
+    chmod 700 /data/adb/magisk/magiskpolicy
+    symlink ./magisk64 /data/adb/magisk/magisk
+    symlink ./magisk /data/adb/magisk/su
+    # Additional binaries from initrd (needed for Kitsune Mask app)
+    copy /boot/magisk/magiskinit /data/adb/magisk/magiskinit
+    chmod 700 /data/adb/magisk/magiskinit
+    copy /boot/magisk/magiskboot /data/adb/magisk/magiskboot
+    chmod 700 /data/adb/magisk/magiskboot
+    copy /boot/magisk/busybox /data/adb/magisk/busybox
+    chmod 700 /data/adb/magisk/busybox
+    # Scripts and assets
+    copy /boot/magisk/stub.apk /data/adb/magisk/stub.apk
+    chmod 644 /data/adb/magisk/stub.apk
+    copy /boot/magisk/util_functions.sh /data/adb/magisk/util_functions.sh
+    chmod 700 /data/adb/magisk/util_functions.sh
+    copy /boot/magisk/boot_patch.sh /data/adb/magisk/boot_patch.sh
+    chmod 700 /data/adb/magisk/boot_patch.sh
+    copy /boot/magisk/addon.d.sh /data/adb/magisk/addon.d.sh
+    chmod 700 /data/adb/magisk/addon.d.sh
+    copy /boot/magisk/main.jar /data/adb/magisk/main.jar
+    chmod 644 /data/adb/magisk/main.jar
+    exec u:r:su:s0 root root -- /sbin/magisk --auto-selinux --boot-complete
+    exec u:r:su:s0 root root -- /sbin/magisk --sqlite "CREATE TABLE IF NOT EXISTS settings (key TEXT, value INT, PRIMARY KEY(key))"
+    exec u:r:su:s0 root root -- /sbin/magisk --sqlite "INSERT OR REPLACE INTO settings VALUES('su_access', 2)"
+    exec u:r:su:s0 root root -- /sbin/magisk --sqlite "INSERT OR REPLACE INTO settings VALUES('multiuser_mode', 0)"
+    exec u:r:su:s0 root root -- /sbin/magisk --sqlite "INSERT OR REPLACE INTO settings VALUES('mnt_ns', 0)"
+    exec u:r:su:s0 root root -- /sbin/magisk --sqlite "INSERT OR REPLACE INTO settings VALUES('denylist', 0)"
+    exec u:r:su:s0 root root -- /sbin/magisk --sqlite "INSERT OR REPLACE INTO settings VALUES('zygisk', 0)"
+    exec u:r:su:s0 root root -- /sbin/magisk --sqlite "CREATE TABLE IF NOT EXISTS hidelist (package_name TEXT, process TEXT, PRIMARY KEY(package_name, process))"
+    exec u:r:su:s0 root root -- /sbin/magisk --sqlite "CREATE TABLE IF NOT EXISTS policies (uid INT, policy INT, until INT, logging INT, notification INT, PRIMARY KEY(uid))"
+    exec u:r:su:s0 root root -- /sbin/magisk --sqlite "CREATE TABLE IF NOT EXISTS strings (key TEXT, value TEXT, PRIMARY KEY(key))"
+    exec u:r:su:s0 root root -- /sbin/magisk --sqlite "INSERT OR REPLACE INTO policies VALUES(2000, 2, 0, 1, 0)"
+    exec u:r:su:s0 root root -- /sbin/magisk --sqlite "INSERT OR REPLACE INTO policies VALUES(0, 2, 0, 1, 0)"
+
+on property:init.svc.zygote=restarting
+    exec u:r:su:s0 root root -- /sbin/magisk --auto-selinux --zygote-restart
+
+on property:init.svc.zygote=stopped
+    exec u:r:su:s0 root root -- /sbin/magisk --auto-selinux --zygote-restart
