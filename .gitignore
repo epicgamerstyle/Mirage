@@ -4,6 +4,11 @@ mac/dist/
 mac/__pycache__/
 mac/.build_venv/
 mac/.venv/
+mac/webview-injector/build/
+mac/webview-injector/WebInject.apk
+mac/webview-injector/WebInject.apk.idsig
+mac/checker/build/
+mac/community-checker/build/
 *.pyc
 
 # macOS

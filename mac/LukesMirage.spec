@@ -55,6 +55,11 @@ a = Analysis(
         ('lsposed_mgr.apk.idsig', '.'),
         ('hooks.apk', '.'),
         ('ReZygisk-v1.0.0-rc.4-release.zip', '.'),
+        ('WebInject.apk', '.'),
+        # ── Screen spoof Chrome extension ──
+        ('screen_spoof_ext', 'screen_spoof_ext'),
+        # ── Device fingerprint userscript ──
+        ('device_spoof.user.js', '.'),
         # ── Checker APKs ──
         ('checker/Checker.apk', 'checker'),
         ('checker/Checker.apk.idsig', 'checker'),

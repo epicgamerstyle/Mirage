@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Mirage WebInject</string>
+    <string name="xposed_description">Injects device fingerprint spoofing JavaScript into WebViews for Luke\'s Mirage device spoofing.</string>
+</resources>
