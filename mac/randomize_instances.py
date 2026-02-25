@@ -683,6 +683,33 @@ def list_profiles_for_sdk(adb_exe: str, serial: str, device_sdk: str) -> list[st
     return matching
 
 
+def _regenerate_userscript(adb_exe: str, serial: str) -> None:
+    """Read active profile from device and push an updated fingerprint userscript.
+
+    Called after a profile switch to keep the browser-level fingerprint
+    spoofing in sync with the native/system-level spoofing.  Non-fatal
+    if it fails — the native layer still works.
+    """
+    try:
+        import generate_userscript as gs
+    except ImportError:
+        # Running from a location where generate_userscript.py isn't importable
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        sys.path.insert(0, script_dir)
+        import generate_userscript as gs
+
+    profile_data = gs.read_active_profile_from_device(adb_exe, serial)
+    chrome_ver = gs.detect_chrome_version(adb_exe, serial)
+    js_content = gs.generate_userscript(profile_data, chrome_ver)
+
+    profile_name = profile_data.get("PROFILE_NAME", "Unknown")
+    pushed = gs.push_userscript_to_device(js_content, adb_exe, serial)
+    if pushed:
+        print(f"       Userscript updated: {profile_name} (Chrome {chrome_ver})")
+    else:
+        print(f"       WARNING: Failed to push userscript to device")
+
+
 def randomize_profile(adb_exe: str, serial: str) -> str:
     """Pick a random profile matching the device SDK and set it as active."""
     device_sdk = get_device_sdk(adb_exe, serial)
@@ -730,6 +757,12 @@ def randomize_profile(adb_exe: str, serial: str) -> str:
         output = apply_cp.stdout.strip()
         if output:
             print(f"       Profile applied live: {output[:120]}")
+
+    # ── Generate & push browser fingerprint userscript for this profile ──
+    try:
+        _regenerate_userscript(adb_exe, serial)
+    except Exception as e:
+        print(f"       WARNING: userscript generation failed: {e}")
 
     return chosen
 
