@@ -51,7 +51,6 @@ if SCRIPT_DIR not in sys.path:
 
 import clone_instance
 import randomize_instances
-import cdp_injector
 import vpn_manager
 
 APP_TITLE = "Luke's Mirage — Instance Manager v2.1 (Mac)"
@@ -252,7 +251,6 @@ class Api:
         self._window = None
         self._running = False
         self._running_lock = threading.Lock()
-        self._cdp_manager = None  # Lazy-initialized CDPManager
         self._vpn_manager = None  # Lazy-initialized VPNManager
 
     def set_window(self, window):
@@ -1925,13 +1923,6 @@ class Api:
 
                     _emit_instance_done(inst.name, True)
 
-                    # Reload CDP injection with new profile values
-                    if self._cdp_manager:
-                        try:
-                            self._cdp_manager.reload_profile(inst.name)
-                        except Exception:
-                            pass
-
                     # Refresh VPN status after identity change
                     if self._vpn_manager:
                         try:
@@ -2572,84 +2563,22 @@ class Api:
         except Exception as e:
             return {"error": str(e)}
 
-    # ── CDP Browser Fingerprint Injection ──
-
-    def _get_cdp_manager(self):
-        """Lazily initialize CDPManager."""
-        if self._cdp_manager is None:
-            bs_dir = self._detect_bs_dir() or clone_instance.DEFAULT_BLUESTACKS_DIR
-            adb_exe = randomize_instances.find_adb_exe(bs_dir)
-            self._cdp_manager = cdp_injector.CDPManager(
-                adb_exe=adb_exe,
-                on_status_change=self._cdp_status_callback,
-            )
-        return self._cdp_manager
-
-    def _cdp_status_callback(self, instance_name, status, error_msg):
-        """Push CDP status changes to the frontend."""
-        if self._window:
-            try:
-                self._window.evaluate_js(
-                    f"if(window.onCdpStatus)"
-                    f"window.onCdpStatus({json.dumps(instance_name)},{json.dumps(status)},{json.dumps(error_msg or '')})"
-                )
-            except Exception:
-                pass
+    # ── CDP (removed — stubs for frontend compatibility) ──
 
     def cdp_toggle(self, instance_name, adb_port, enable):
-        """Toggle CDP injection for a single instance."""
-        try:
-            mgr = self._get_cdp_manager()
-            serial = f"127.0.0.1:{adb_port}"
-            if enable:
-                # Use full port offset to avoid collisions between instances
-                # ADB ports are typically 5555, 5565, 5575, etc. (10 apart)
-                local_port = 9222 + (int(adb_port) - 5555)
-                mgr.enable_instance(instance_name, serial, local_port)
-                return {"error": None, "enabled": True}
-            else:
-                mgr.disable_instance(instance_name)
-                return {"error": None, "enabled": False}
-        except Exception as e:
-            return {"error": str(e)}
+        return {"error": None, "enabled": False}
 
     def cdp_enable_all(self, instances):
-        """Enable CDP for multiple running instances. instances = [{name, port}, ...]"""
-        try:
-            mgr = self._get_cdp_manager()
-            for inst in instances:
-                serial = f"127.0.0.1:{inst['port']}"
-                # Use full port offset to avoid collisions between instances
-                # ADB ports are typically 5555, 5565, 5575, etc. (10 apart)
-                local_port = 9222 + (int(inst['port']) - 5555)
-                mgr.enable_instance(inst['name'], serial, local_port)
-            return {"error": None}
-        except Exception as e:
-            return {"error": str(e)}
+        return {"error": None}
 
     def cdp_disable_all(self):
-        """Disable CDP for all instances."""
-        try:
-            if self._cdp_manager:
-                self._cdp_manager.disable_all()
-            return {"error": None}
-        except Exception as e:
-            return {"error": str(e)}
+        return {"error": None}
 
     def cdp_get_statuses(self):
-        """Get CDP status for all tracked instances."""
-        if self._cdp_manager:
-            return self._cdp_manager.get_all_statuses()
         return {}
 
     def cdp_reload(self, instance_name):
-        """Re-read profile and re-inject for an instance (after randomize)."""
-        try:
-            if self._cdp_manager:
-                self._cdp_manager.reload_profile(instance_name)
-            return {"error": None}
-        except Exception as e:
-            return {"error": str(e)}
+        return {"error": None}
 
     # ── VPN / Proxy Management ──
 

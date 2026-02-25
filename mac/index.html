@@ -4455,8 +4455,6 @@
                         <button class="ut-btn" id="utBtnStopAll" onclick="utStopAll()">Stop All</button>
                         <div class="ut-topbar-divider"></div>
                         <button class="ut-btn" id="utBtnRefresh" onclick="utRefresh()">Refresh</button>
-                        <div class="ut-topbar-divider"></div>
-                        <button class="ut-btn" id="utBtnCdp" onclick="utToggleCdpAll()" title="Toggle CDP browser fingerprint injection for all instances">CDP: Off</button>
                     </div>
                 </div>
                 <div class="ut-grid" id="utGrid">
@@ -5279,9 +5277,6 @@ let STATE = {
     imInstances: [],
     imSelected: new Set(),
     imPollingTimer: null,
-    // CDP browser fingerprint injection
-    cdpStatuses: {},
-    cdpGlobalEnabled: false,
     // VPN tab
     vpnProxyPool: [],        // [{id, label, server, port, username, password}]
     vpnAssignments: {},      // {instanceName: proxyId}
@@ -6210,25 +6205,11 @@ function utRender() {
 
         const statusText = isRunning ? (hasRoot ? 'Root' : 'No root') : 'Offline';
 
-        // CDP badge (only on running instances)
-        const cdpState = STATE.cdpStatuses[inst.name] || {};
-        const cdpStatus = cdpState.status || 'idle';
-        let cdpBadge = '';
-        if (isRunning) {
-            const cdpCls = cdpStatus === 'injected' ? 'cdp-on' :
-                           cdpStatus === 'polling' || cdpStatus === 'connecting' ? 'cdp-wait' :
-                           cdpStatus === 'error' ? 'cdp-err' : 'cdp-off';
-            const cdpTxt = cdpStatus === 'injected' ? 'CDP' :
-                           cdpStatus === 'polling' || cdpStatus === 'connecting' ? 'CDP...' :
-                           cdpStatus === 'error' ? 'CDP!' : 'CDP';
-            cdpBadge = '<span class="ut-cdp ' + cdpCls + '" onclick="event.stopPropagation();utToggleCdp(\'' + inst.name + '\',' + (inst.port || 0) + ')" title="Toggle browser fingerprint injection">' + cdpTxt + '</span>';
-        }
-
         card.innerHTML =
             '<div class="ut-dot ' + (isRunning ? 'on' : 'off') + '"></div>' +
             '<div class="ut-card-info">' +
                 '<div class="ut-card-name">' + escapeHtml(inst.display || inst.name) + '</div>' +
-                '<div class="ut-card-meta">:' + (inst.port || '?') + ' · ' + statusText + cdpBadge + '</div>' +
+                '<div class="ut-card-meta">:' + (inst.port || '?') + ' · ' + statusText + '</div>' +
             '</div>' +
             '<div class="ut-actions">' + startBtn + stopBtn + randBtn + deleteBtn + '</div>';
 
@@ -6366,101 +6347,6 @@ async function utRefresh() {
         }
     } catch (e) { appendLog('[Error] Refresh failed: ' + e); }
     finally { if (btn) btn.disabled = false; }
-}
-
-// ── CDP Browser Fingerprint Injection ──────────────────────────
-
-window.onCdpStatus = function(instName, status, errorMsg) {
-    STATE.cdpStatuses[instName] = STATE.cdpStatuses[instName] || {};
-    STATE.cdpStatuses[instName].status = status;
-    STATE.cdpStatuses[instName].error_msg = errorMsg;
-    STATE.cdpStatuses[instName].connected = (status === 'injected');
-    STATE.cdpStatuses[instName].enabled = (status !== 'idle');
-    utUpdateCdpBadge(instName);
-    utUpdateCdpGlobal();
-};
-
-function utUpdateCdpBadge(name) {
-    const card = document.querySelector('.ut-card[data-name="' + name + '"]');
-    if (!card) return;
-    const badge = card.querySelector('.ut-cdp');
-    if (!badge) return;
-    const cdpState = STATE.cdpStatuses[name] || {};
-    const status = cdpState.status || 'idle';
-    const cls = status === 'injected' ? 'cdp-on' :
-                status === 'polling' || status === 'connecting' ? 'cdp-wait' :
-                status === 'error' ? 'cdp-err' : 'cdp-off';
-    const txt = status === 'injected' ? 'CDP' :
-                status === 'polling' || status === 'connecting' ? 'CDP...' :
-                status === 'error' ? 'CDP!' : 'CDP';
-    badge.className = 'ut-cdp ' + cls;
-    badge.textContent = txt;
-}
-
-async function utToggleCdp(name, port) {
-    const current = STATE.cdpStatuses[name] || {};
-    const isEnabled = current.status && current.status !== 'idle';
-    try {
-        await pywebview.api.cdp_toggle(name, port, !isEnabled);
-        if (!isEnabled) {
-            STATE.cdpStatuses[name] = { status: 'polling', enabled: true };
-            showToast('CDP injection starting for ' + name, 'info', 2000);
-        } else {
-            STATE.cdpStatuses[name] = { status: 'idle', enabled: false };
-            showToast('CDP injection stopped for ' + name, 'info', 2000);
-        }
-        utUpdateCdpBadge(name);
-        utUpdateCdpGlobal();
-    } catch (e) {
-        showToast('CDP toggle failed: ' + e, 'error');
-    }
-}
-
-async function utToggleCdpAll() {
-    const running = STATE.randInstances.filter(i => i.running);
-    if (!running.length) {
-        showToast('No running instances', 'error', 2000);
-        return;
-    }
-    // Check if any are currently enabled
-    const anyEnabled = running.some(i => {
-        const s = STATE.cdpStatuses[i.name] || {};
-        return s.status && s.status !== 'idle';
-    });
-    try {
-        if (anyEnabled) {
-            // Disable all
-            await pywebview.api.cdp_disable_all();
-            running.forEach(i => {
-                STATE.cdpStatuses[i.name] = { status: 'idle', enabled: false };
-                utUpdateCdpBadge(i.name);
-            });
-            STATE.cdpGlobalEnabled = false;
-            showToast('CDP injection disabled', 'info', 2000);
-        } else {
-            // Enable all
-            const targets = running.map(i => ({ name: i.name, port: i.port }));
-            await pywebview.api.cdp_enable_all(targets);
-            running.forEach(i => {
-                STATE.cdpStatuses[i.name] = { status: 'polling', enabled: true };
-                utUpdateCdpBadge(i.name);
-            });
-            STATE.cdpGlobalEnabled = true;
-            showToast('CDP injection starting for ' + running.length + ' instance(s)', 'info', 2000);
-        }
-    } catch (e) {
-        showToast('CDP toggle failed: ' + e, 'error');
-        appendLog('[Error] CDP toggle: ' + String(e));
-    }
-    utUpdateCdpGlobal();
-}
-
-function utUpdateCdpGlobal() {
-    const btn = document.getElementById('utBtnCdp');
-    if (!btn) return;
-    const anyActive = Object.values(STATE.cdpStatuses).some(s => s.status && s.status !== 'idle');
-    btn.textContent = anyActive ? 'CDP: On' : 'CDP: Off';
-    btn.style.color = anyActive ? '#10B685' : '';
 }
 
 function updateRandSummary() {

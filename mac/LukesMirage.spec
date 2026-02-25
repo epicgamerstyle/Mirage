@@ -29,7 +29,6 @@ a = Analysis(
         # ── Co-located Python modules (imported by gui.py) ──
         ('clone_instance.py', '.'),
         ('randomize_instances.py', '.'),
-        ('cdp_injector.py', '.'),
         ('vpn_manager.py', '.'),
         # ── Web UI ──
         ('index.html', '.'),
