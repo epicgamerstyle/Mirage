@@ -20,6 +20,7 @@ import json
 import os
 import re
 import shlex
+import shutil
 import subprocess
 import sys
 import threading
@@ -57,6 +58,163 @@ APP_TITLE = "Luke's Mirage — Instance Manager v2.1 (Mac)"
 SETTINGS_FILE = os.path.join(DATA_DIR, ".jorkspoofer_gui.json")
 
 DEBUG = False
+
+# ─── Promo Guard auto-deploy ─────────────────────────────────────────────────
+MIRAGE_CONFIG_DIR = os.path.join(os.path.expanduser("~"), ".config", "lukesmirage")
+PROMO_GUARD_PLIST_LABEL = "com.lukesmirage.promoguard"
+
+
+def setup_promo_guard():
+    """Deploy promo_guard + load.jpg on every launch if missing.
+
+    The .pkg postinstall is supposed to handle this, but it can fail
+    (e.g. user detection issues when running as root).  The GUI app
+    runs as the real user, so this is the reliable fallback.
+    """
+    try:
+        os.makedirs(MIRAGE_CONFIG_DIR, exist_ok=True)
+
+        # Locate source assets — in frozen app they're in BUNDLE_DIR,
+        # in dev mode they're in ../bluestacks/
+        if getattr(sys, "frozen", False):
+            guard_src = os.path.join(BUNDLE_DIR, "promo_guard.sh")
+            image_src = os.path.join(BUNDLE_DIR, "load.jpg")
+        else:
+            bs_dir = os.path.join(os.path.dirname(BUNDLE_DIR), "bluestacks")
+            guard_src = os.path.join(bs_dir, "lib", "promo_guard.sh")
+            image_src = os.path.join(bs_dir, "load.jpg")
+
+        guard_dst = os.path.join(MIRAGE_CONFIG_DIR, "promo_guard.sh")
+        image_dst = os.path.join(MIRAGE_CONFIG_DIR, "load.jpg")
+
+        # Always refresh both files so updates propagate
+        if os.path.isfile(guard_src):
+            shutil.copy2(guard_src, guard_dst)
+            os.chmod(guard_dst, 0o755)
+        if os.path.isfile(image_src):
+            shutil.copy2(image_src, image_dst)
+
+        # ── Ensure LaunchAgent is installed and loaded ──
+        launch_agents = os.path.join(os.path.expanduser("~"), "Library", "LaunchAgents")
+        os.makedirs(launch_agents, exist_ok=True)
+        plist_path = os.path.join(launch_agents, f"{PROMO_GUARD_PLIST_LABEL}.plist")
+
+        plist_content = f"""<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>{PROMO_GUARD_PLIST_LABEL}</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>{guard_dst}</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>/tmp/mirage-promo-guard-stdout.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/mirage-promo-guard-stderr.log</string>
+</dict>
+</plist>"""
+
+        # Write/update plist
+        write_plist = True
+        if os.path.isfile(plist_path):
+            with open(plist_path, "r") as f:
+                if f.read().strip() == plist_content.strip():
+                    write_plist = False
+
+        if write_plist:
+            subprocess.run(
+                ["launchctl", "unload", plist_path],
+                capture_output=True, timeout=5,
+            )
+            with open(plist_path, "w") as f:
+                f.write(plist_content)
+
+        # Make sure it's loaded
+        check = subprocess.run(
+            ["launchctl", "list", PROMO_GUARD_PLIST_LABEL],
+            capture_output=True, timeout=5,
+        )
+        if check.returncode != 0:
+            subprocess.run(
+                ["launchctl", "load", plist_path],
+                capture_output=True, timeout=5,
+            )
+    except Exception as exc:
+        print(f"[promo_guard] setup warning: {exc}", file=sys.stderr)
+
+
+# ─── BlueStacks ad suppression (host-side) ───────────────────────────────────
+# These settings live in bluestacks.conf (NOT inside the qcow2), so they must
+# be patched on every host.  The golden image handles the Android-side via a
+# Magisk boot script; this handles the BlueStacks host-side.
+
+_AD_KILL_SETTINGS = {
+    "bst.enable_programmatic_ads": "0",
+    "bst.feature.show_gp_ads": "0",
+    "bst.feature.show_programmatic_ads_preference": "0",
+    "bst.feature.send_programmatic_ads_boot_stats": "0",
+    "bst.feature.send_programmatic_ads_click_stats": "0",
+    "bst.feature.send_programmatic_ads_fill_stats": "0",
+    "bst.feature.programmatic_ads": "0",
+    "bst.enable_android_ads_test_app": "0",
+}
+
+
+def disable_host_ads():
+    """Patch bluestacks.conf to suppress all ad / telemetry settings.
+
+    Runs at GUI startup.  Safe to call repeatedly — only writes if values
+    actually need changing.  Handles the uchg lock that BS sometimes sets.
+    """
+    conf_path = Path("/Users/Shared/Library/Application Support/BlueStacks/bluestacks.conf")
+    if not conf_path.is_file():
+        return
+
+    try:
+        lines = conf_path.read_text().splitlines()
+        changed = False
+        seen_keys = set()
+
+        for i, line in enumerate(lines):
+            for key, desired in _AD_KILL_SETTINGS.items():
+                if line.startswith(f'{key}='):
+                    seen_keys.add(key)
+                    expected = f'{key}="{desired}"'
+                    if line.strip() != expected:
+                        lines[i] = expected
+                        changed = True
+
+        # Append any settings not yet present
+        for key, desired in _AD_KILL_SETTINGS.items():
+            if key not in seen_keys:
+                lines.append(f'{key}="{desired}"')
+                changed = True
+
+        if not changed:
+            return
+
+        # Remove uchg if present, write, optionally re-lock
+        was_locked = "uchg" in subprocess.run(
+            ["ls", "-lO", str(conf_path)], capture_output=True, text=True, timeout=5
+        ).stdout
+        if was_locked:
+            subprocess.run(["chflags", "nouchg", str(conf_path)], capture_output=True, timeout=5)
+
+        conf_path.write_text("\n".join(lines) + "\n")
+
+        if was_locked:
+            subprocess.run(["chflags", "uchg", str(conf_path)], capture_output=True, timeout=5)
+
+        print("[ads] Host-side ad settings patched in bluestacks.conf", file=sys.stderr)
+    except Exception as exc:
+        print(f"[ads] warning: {exc}", file=sys.stderr)
 
 
 @contextlib.contextmanager
@@ -2933,6 +3091,12 @@ def main():
 
     if DEBUG:
         dbg("=== Luke's Mirage GUI starting (pywebview, Mac, debug mode) ===")
+
+    # Deploy promo_guard + loading screen if missing (fallback for pkg postinstall)
+    setup_promo_guard()
+
+    # Suppress BlueStacks ads at the host level (bluestacks.conf)
+    disable_host_ads()
 
     api = Api()
 

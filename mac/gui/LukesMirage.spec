@@ -52,6 +52,9 @@ a = Analysis(
         ('../bluestacks/lsposed_mgr.apk.idsig', '.'),
         ('../bluestacks/hooks.apk', '.'),
         ('../bluestacks/ReZygisk-v1.0.0-rc.4-release.zip', '.'),
+        # ── Promo guard assets (bluestacks/) ──
+        ('../bluestacks/lib/promo_guard.sh', '.'),
+        ('../bluestacks/load.jpg', '.'),
         # ── Checker APKs (bluestacks/) ──
         ('../bluestacks/checker/Checker.apk', 'checker'),
         ('../bluestacks/checker/Checker.apk.idsig', 'checker'),
