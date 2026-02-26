@@ -1,0 +1,13 @@
+{
+    "created": "2026-02-26T08:19:54Z",
+    "source_instance": "Tiramisu64_2",
+    "bluestacks_version": "5.21.755",
+    "platform": "mac",
+    "android_version": "13",
+    "sdk_level": "33",
+    "instance_type": "Tiramisu64",
+    "disk_format": "qcow2",
+    "includes_host_assets": true,
+    "host_assets": ["Promotions", "AppCache", "wallpaper.jpg", "load.jpg"],
+    "notes": "Complete golden image with Magisk, Zygisk, jorkSpoofer, custom loading screen, wallpaper, and app icons"
+}

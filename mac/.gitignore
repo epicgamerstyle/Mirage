@@ -1,0 +1,30 @@
+# Build artifacts
+gui/build/
+gui/dist/
+gui/.build_venv/
+gui/.venv/
+gui/__pycache__/
+
+# Golden image (too large for git — uploaded as Release asset)
+bluestacks/golden_image/*.qcow2
+bluestacks/golden_image/*.bak
+
+# Large binaries not needed in repo
+bluestacks/jorkSpoofer-base.tar.zst
+bluestacks/chromium_144.apk
+bluestacks/cromite-webview-module.zip
+
+# APK work directories
+bluestacks/*_work/
+bluestacks/lsposed_blocker/
+bluestacks/backups/
+
+# macOS junk
+.DS_Store
+**/.DS_Store
+
+# Archive (dev reference only)
+_archive/
+
+# Config with credentials
+gui/.jorkspoofer_gui.json
