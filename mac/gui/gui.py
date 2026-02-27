@@ -54,7 +54,7 @@ import clone_instance
 import randomize_instances
 import vpn_manager
 
-APP_TITLE = "Luke's Mirage — Instance Manager v2.1 (Mac)"
+APP_TITLE = "Luke's Mirage | Instance Manager"
 SETTINGS_FILE = os.path.join(DATA_DIR, ".jorkspoofer_gui.json")
 
 DEBUG = False
