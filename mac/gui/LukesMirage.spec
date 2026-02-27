@@ -91,7 +91,7 @@ coll = COLLECT(
 app = BUNDLE(
     coll,
     name="Luke's Mirage.app",
-    icon=None,  # Add .icns file here when available
+    icon='LukesMirage.icns',
     bundle_identifier='com.lukesmirage.manager',
     info_plist={
         'CFBundleDisplayName': "Luke's Mirage",
