@@ -190,6 +190,90 @@ def copy_non_disk_payload(source_dir, clone_dir, dry_run, quiet=False):
 
 
 # ---------------------------------------------------------------------------
+# Promotions seeding — ensures every new instance gets a custom load screen
+# ---------------------------------------------------------------------------
+
+_PROMO_JSON_TEMPLATE = """\
+{
+    "boot_promotion_obj": {
+        "boot_promotion_display_time": 30000,
+        "boot_promotion_id": "mirage-custom",
+        "boot_promotion_images": [
+            {
+                "button_text": "",
+                "extra_payload": {
+                    "click_generic_action": "None",
+                    "hash_tags": "#oem:nxt_mac2"
+                },
+                "id": "mirage_custom",
+                "image_url": "BootPromotion_us_prod_2025_04_02_05_41_37.jpg",
+                "order": "1",
+                "promo_button_click_status_text": ""
+            }
+        ],
+        "last_modified_time": "Wed Feb 26 00:00:00 2026"
+    },
+    "boot_promotion_orientation": "landscape",
+    "promotion_images_display_date": {
+        "BootPromotion_us_prod_2025_04_02_05_41_37.jpg": "Wed Feb 26 00:00:00 2026"
+    }
+}
+"""
+
+_PROMO_FILENAME = "BootPromotion_us_prod_2025_04_02_05_41_37.jpg"
+
+
+def seed_promotions(instance_dir, quiet=False):
+    """Seed the Promotions/ folder with the custom load.jpg so boot shows our screen.
+
+    Looks for load.jpg in these locations (first match wins):
+      1. ~/.config/lukesmirage/load.jpg  (deployed by GUI on launch)
+      2. BUNDLE_DIR/load.jpg             (frozen app resources)
+      3. ../bluestacks/load.jpg          (dev mode)
+
+    If no load.jpg is found, silently skips — promo_guard will fix it later.
+    """
+    promo_dir = instance_dir / "Promotions"
+    promo_dir.mkdir(exist_ok=True)
+
+    # Already has promo content? Skip.
+    existing_jpgs = list(promo_dir.glob("BootPromotion_*.jpg"))
+    if existing_jpgs:
+        return
+
+    # Find the custom load image
+    candidates = [
+        Path.home() / ".config" / "lukesmirage" / "load.jpg",
+    ]
+    # Add frozen-app and dev-mode paths
+    script_dir = Path(__file__).resolve().parent
+    candidates.append(script_dir / "load.jpg")
+    candidates.append(script_dir.parent / "bluestacks" / "load.jpg")
+
+    load_jpg = None
+    for c in candidates:
+        if c.is_file():
+            load_jpg = c
+            break
+
+    if not load_jpg:
+        if not quiet:
+            print("  [promo] load.jpg not found — skipping promo seed (promo_guard will fix later)")
+        return
+
+    # Copy load.jpg as the boot promotion image
+    dst_jpg = promo_dir / _PROMO_FILENAME
+    shutil.copy2(load_jpg, dst_jpg)
+
+    # Write Promotions.json
+    dst_json = promo_dir / "Promotions.json"
+    dst_json.write_text(_PROMO_JSON_TEMPLATE, encoding="utf-8")
+
+    if not quiet:
+        print(f"  [promo] Seeded custom boot screen into {instance_dir.name}/Promotions/")
+
+
+# ---------------------------------------------------------------------------
 # bluestacks.conf handling
 # ---------------------------------------------------------------------------
 
@@ -934,6 +1018,9 @@ def create_instance_from_base(
         for subdir in ["AppCache", "Flyers", "Onboardings", "Promotions", "nowBux", "topbar"]:
             (instance_dir / subdir).mkdir(exist_ok=True)
 
+        # Seed custom boot screen so the instance doesn't show a blank/stuck promo
+        seed_promotions(instance_dir, quiet=quiet)
+
         # ── Step 2: Copy base image ──
         _emit("Copying base image (this may take a moment)...")
         dst_qcow2 = instance_dir / "data.qcow2"
@@ -1091,6 +1178,10 @@ def clone_instance(source_name, clone_name, engine_dir, bluestacks_dir, fix_mode
         else:
             print("\nCopying non-disk instance payload...")
         copy_non_disk_payload(source_dir, clone_dir, dry_run, quiet=quiet)
+
+    # Step 2c: Seed custom boot screen if Promotions/ is empty
+    if not dry_run:
+        seed_promotions(clone_dir, quiet=quiet)
 
     # Step 3: Update bluestacks.conf
     # (No VBox UUID patching needed on Mac — QCOW2 disks don't have embedded UUIDs)

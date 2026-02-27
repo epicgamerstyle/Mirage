@@ -1932,6 +1932,43 @@ class Api:
 
         return {"error": None, "instances": results}
 
+    def fix_promotions(self, engine_dir):
+        """Seed custom load.jpg into all instances missing boot promotions."""
+        if not engine_dir:
+            return {"error": "Engine directory not set", "fixed": 0}
+        engine = Path(engine_dir)
+        if not engine.is_dir():
+            return {"error": f"Engine directory not found: {engine}", "fixed": 0}
+
+        fixed = 0
+        for d in sorted(engine.iterdir()):
+            if not d.is_dir() or not d.name.startswith("Tiramisu64"):
+                continue
+            promo_dir = d / "Promotions"
+            promo_dir.mkdir(exist_ok=True)
+            # Only seed if no BootPromotion jpgs exist
+            existing = list(promo_dir.glob("BootPromotion_*.jpg"))
+            if not existing:
+                clone_instance.seed_promotions(d, quiet=True)
+                fixed += 1
+            else:
+                # Check if existing jpgs match our custom load.jpg (size comparison)
+                load_jpg = Path.home() / ".config" / "lukesmirage" / "load.jpg"
+                if load_jpg.is_file():
+                    custom_size = load_jpg.stat().st_size
+                    for jpg in existing:
+                        if jpg.stat().st_size != custom_size:
+                            # Overwrite with custom image
+                            import shutil as _shutil
+                            _shutil.copy2(load_jpg, jpg)
+                    # Also fix Promotions.json
+                    pjson = promo_dir / "Promotions.json"
+                    if not pjson.is_file() or "mirage_custom" not in pjson.read_text(errors="ignore"):
+                        pjson.write_text(clone_instance._PROMO_JSON_TEMPLATE, encoding="utf-8")
+                    fixed += 1
+
+        return {"error": None, "fixed": fixed}
+
     def do_randomize(self, instance_names, engine_dir, bs_dir, do_profile, skip_reboot):
         """Run randomization on selected instances with per-instance progress."""
         if not self._acquire_running():

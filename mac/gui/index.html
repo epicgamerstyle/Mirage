@@ -4557,6 +4557,8 @@
                         <button class="ut-btn" id="utBtnStartAll" onclick="utStartAll()">Start All</button>
                         <button class="ut-btn" id="utBtnStopAll" onclick="utStopAll()">Stop All</button>
                         <div class="ut-topbar-divider"></div>
+                        <button class="ut-btn" id="utBtnFixPromos" onclick="utFixPromos()" title="Apply custom boot screen to all instances">Fix Boot Screen</button>
+                        <div class="ut-topbar-divider"></div>
                         <button class="ut-btn" id="utBtnRefresh" onclick="utRefresh()">Refresh</button>
                     </div>
                 </div>
@@ -6434,6 +6436,22 @@ async function utStopAll() {
     }
     showToast('Stop commands sent for ' + running.length + ' instances', 'success');
     setTimeout(() => utRefresh(), 4000);
+}
+
+async function utFixPromos() {
+    if (!STATE.engineDir) return;
+    const btn = document.getElementById('utBtnFixPromos');
+    if (btn) { btn.disabled = true; btn.textContent = 'Applying...'; }
+    try {
+        const result = await pywebview.api.fix_promotions(STATE.engineDir);
+        if (result && !result.error) {
+            showToast(`Boot screen applied to ${result.fixed} instance${result.fixed !== 1 ? 's' : ''}`, 'success');
+            appendLog(`[promo] Fixed boot screen on ${result.fixed} instances`);
+        } else {
+            showToast(result.error || 'Fix failed', 'error');
+        }
+    } catch (e) { showToast('Fix failed: ' + e, 'error'); }
+    finally { if (btn) { btn.disabled = false; btn.textContent = 'Fix Boot Screen'; } }
 }
 
 async function utRefresh() {
