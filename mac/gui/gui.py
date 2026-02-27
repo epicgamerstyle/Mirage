@@ -333,6 +333,8 @@ def save_settings(data):
         try:
             with open(SETTINGS_FILE, "w") as f:
                 json.dump(data, f, indent=2)
+                f.flush()
+                os.fsync(f.fileno())
         except OSError:
             pass
 
@@ -462,6 +464,7 @@ class Api:
             "vpn_assignments": settings.get("vpn_assignments", {}),
             "suborbital_email": settings.get("suborbital_email", ""),
             "suborbital_has_password": bool(settings.get("suborbital_password", "")),
+            "wizard_pending": settings.get("wizard_pending", ""),
         }
 
     def verify_paths(self, engine_dir=None, bs_dir=None):
@@ -498,6 +501,25 @@ class Api:
             "conf_path": str(conf_path) if conf_path else "",
             "adb_path": str(adb_path) if adb_path else "",
         }
+
+    def set_wizard_pending(self, step):
+        """Persist wizard-pending flag to disk (survives force-close)."""
+        settings = load_settings()
+        settings["wizard_pending"] = step
+        save_settings(settings)
+        return True
+
+    def get_wizard_pending(self):
+        """Read wizard-pending flag from disk."""
+        settings = load_settings()
+        return settings.get("wizard_pending", "")
+
+    def clear_wizard_pending(self):
+        """Remove wizard-pending flag from disk."""
+        settings = load_settings()
+        settings.pop("wizard_pending", None)
+        save_settings(settings)
+        return True
 
     def reset_settings(self):
         """Clear all saved settings to re-trigger setup wizard."""
