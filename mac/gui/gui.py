@@ -1276,9 +1276,15 @@ class Api:
         if not script.is_file():
             return {"success": False, "output": "root_bluestacks.sh not found"}
 
+        # Use the bundled kitsune.apk instead of downloading from GitHub
+        cmd = ["bash", str(script), "--gui"]
+        local_apk = Path(BUNDLE_DIR) / "kitsune.apk"
+        if local_apk.is_file():
+            cmd.extend(["--apk", str(local_apk)])
+
         try:
             cp = subprocess.run(
-                ["bash", str(script), "--gui"],
+                cmd,
                 capture_output=True, text=True, timeout=180,
                 env=self._root_script_env()
             )
